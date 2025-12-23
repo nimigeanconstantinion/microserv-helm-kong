@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: register-service
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: register-service
+  template:
+    metadata:
+      labels:
+        app: register-service
+    spec:
+      containers:
+        - name: register-service
+          image: ion21/register-service:23.12.2025_102800
+          ports:
+            - containerPort: 8088
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: "helm"
+            - name: KEYCLOAK_AUTH_SERVER_URL
+              value: http://keycloak:8080
+            - name: KEYCLOAK_REALM
+              value: rsk
+            - name: KEYCLOAK_CLIENT_ID
+              value: registration-service
+            - name: KEYCLOAK_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "ms-kong.fullname" . }}-keycloak-secret
+                  key: clientSecret
+         
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: register-service
+  namespace: default
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8088
+      targetPort: 8088
+  selector:
+    app: register-service

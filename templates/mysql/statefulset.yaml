@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Values.mysql.serviceName }}
+  namespace: default
+spec:
+  serviceName: mysql-service
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Values.mysql.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.mysql.name }}
+    spec:
+      containers:
+        - name: {{ .Values.mysql.name }}
+          image: {{ include "ms-kong.image" (dict "image" .Values.mysql.image "global" .Values.global) }}
+          imagePullPolicy: {{ .Values.mysql.image.pullPolicy }}
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              value: {{ .Values.mysql.rootPassword }}
+            # - name: MYSQL_DATABASE
+            #   value: {{ .Values.mysql.database }}
+            # - name: MYSQL_USER
+            #   value: {{ .Values.mysql.user }}
+            # - name: MYSQL_PASSWORD
+            #   value: {{ .Values.mysql.password }}
+          ports:
+            - containerPort: 3306
+              name: {{ .Values.mysql.name}}
+          volumeMounts:
+            - name: mysql-storage
+              mountPath: /var/lib/mysql
+            - name: init-script
+              mountPath: /docker-entrypoint-initdb.d/keycloak-db.sql
+              subPath: keycloak-db.sql              
+      volumes:
+        - name: init-script
+          configMap:
+            name: {{ include "ms-kong.fullname" . }}-app-config
+        - name: mysql-storage
+          persistentVolumeClaim:
+            claimName: {{ include "ms-kong.fullname" . }}-mysql-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-service
+  namespace: default
+spec:
+  ports:
+    - port: 3306
+      targetPort: 3306
+  clusterIP: None
+  selector:
+    app: {{ .Values.mysql.name }}
+

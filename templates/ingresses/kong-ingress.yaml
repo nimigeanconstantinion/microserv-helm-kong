@@ -1,0 +1,34 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kong-admin-ingress
+  namespace: default
+  annotations:
+    kubernetes.io/ingress.class: kong
+    # Permitem accesul cross-origin pentru ca Managerul să poată vorbi cu API-ul
+    konghq.com: cors-plugin 
+spec:
+  rules:
+    # Regula pentru Admin API
+    - host: kong-admin.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: kong-service # Numele serviciului tău de Kong
+                port:
+                  number: 8001
+    
+    # Regula pentru Manager GUI
+    - host: kong-manager.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: kong-service
+                port:
+                  number: 8002

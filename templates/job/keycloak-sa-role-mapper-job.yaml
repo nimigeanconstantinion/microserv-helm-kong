@@ -1,0 +1,125 @@
+# templates/job/keycloak-sa-role-mapper-job.yaml
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "ms-kong.fullname" . }}-sa-role-mapper-v2
+  labels:
+    {{- include "ms-kong.labels" . | nindent 4 }}
+  annotations:
+    # Ruleaza dupa instalare/upgrade; ramane in K8s pentru log-uri.
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation 
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: assign-roles
+        image: bitnami/kubectl:latest 
+        imagePullPolicy: IfNotPresent
+        env:
+        # --- Credentialele Admin, preluate din Secret ---
+        - name: ADMIN_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "ms-kong.fullname" . }}-keycloak-secret
+              key: adminUser
+        - name: ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "ms-kong.fullname" . }}-keycloak-secret
+              key: adminPassword
+              
+        # --- Constante ---
+        - name: KC_HOST
+          value: http://keycloak:8080 
+        - name: CLIENT_ID
+          value: "registration-service"
+        - name: REALM_NAME
+          value: "rsk"
+        - name: CLIENT_SECRET # Secretul Clientului SA (nu e necesar pentru auth, dar e folosit in logica initiala)
+          value: "my-secret-keycloak" 
+
+        command: ["/bin/bash", "-c"]
+        args:
+        - |
+          echo "Asteptam ca Keycloak sa fie disponibil..."
+          until curl -s $KC_HOST/realms/$REALM_NAME/protocol/openid-connect/certs; do
+            sleep 5
+          done
+          echo "Keycloak este online. Incep maparea rolurilor..."
+
+          # --- PAS 1: Obtine Tokenul de Administrare (cu credentale Admin) ---
+          TOKEN=$(curl -s -X POST $KC_HOST/realms/master/protocol/openid-connect/token \
+            -d "username=$ADMIN_USER" \
+            -d "password=$ADMIN_PASSWORD" \
+            -d "client_id=admin-cli" \
+            -d "grant_type=password" | jq -r .access_token)
+
+          if [ -z "$TOKEN" ] || [ "$TOKEN" == "null" ]; then
+            echo "Eroare: Nu s-a putut obtine token-ul ADMIN. Job esueaza."
+            exit 1
+          fi
+          
+          ADMIN_API="$KC_HOST/admin/realms/$REALM_NAME"
+          HEADER="Authorization: Bearer $TOKEN"
+          echo "Token ADMIN obtinut cu succes."
+
+          # --- PAS 2: Obtine ID-ul Utilizatorului Service Account ---
+          SA_USER_ID=$(curl -s -X GET "$ADMIN_API/users?username=service-account-$CLIENT_ID" -H "$HEADER" | jq -r '.[0].id')
+          
+          if [ -z "$SA_USER_ID" ] || [ "$SA_USER_ID" == "null" ]; then
+            echo "Eroare: Nu s-a gasit utilizatorul Service Account. Job esueaza."
+            exit 1
+          fi
+          
+          echo "ID-ul Service Account-ului este: $SA_USER_ID"
+
+          # --- PAS 3: Obtine ID-ul Clientului 'realm-management' ---
+          REALM_MANAGEMENT_CLIENT_ID=$(curl -s -X GET "$ADMIN_API/clients?clientId=realm-management" -H "$HEADER" | jq -r '.[0].id')
+          
+          if [ -z "$REALM_MANAGEMENT_CLIENT_ID" ] || [ "$REALM_MANAGEMENT_CLIENT_ID" == "null" ]; then
+            echo "Eroare: Nu s-a gasit clientul realm-management. Job esueaza."
+            exit 1
+          fi
+
+          # --- PAS 4: Construieste Payload-ul cu ID-urile Rolurilor (Lógica Robustă) ---
+          ROLES_TO_ASSIGN=("manage-users" "view-users" "view-realm")
+          ROLES_PAYLOAD="["
+          
+          for ROLE_NAME in "${ROLES_TO_ASSIGN[@]}"; do
+              # Cauta rolul in clientul 'realm-management'
+              ROLE_INFO=$(curl -s -X GET "$ADMIN_API/clients/$REALM_MANAGEMENT_CLIENT_ID/roles/$ROLE_NAME" -H "$HEADER")
+              ROLE_ID=$(echo "$ROLE_INFO" | jq -r '.id')
+
+              if [ -z "$ROLE_ID" ] || [ "$ROLE_ID" == "null" ]; then
+                  echo "Eroare: Nu s-a putut gasi ID-ul pentru rolul '$ROLE_NAME'. Job esueaza."
+                  exit 1
+              fi
+              
+              ROLES_PAYLOAD="${ROLES_PAYLOAD} { \"id\": \"$ROLE_ID\", \"name\": \"$ROLE_NAME\" },"
+          done
+
+          # Finalizeaza payload-ul JSON (elimina ultima virgula si adauga bracket-ul de final)
+          ROLES_PAYLOAD=$(echo "${ROLES_PAYLOAD%,}]" | tr -d '\n')
+          
+          echo "Payload de roluri generat: $ROLES_PAYLOAD"
+
+          # --- PAS 5: Atribuie Rolurile Service Account-ului ---
+          echo "Atribuie roluri catre utilizatorul SA..."
+          RESPONSE_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$ADMIN_API/users/$SA_USER_ID/role-mappings/clients/$REALM_MANAGEMENT_CLIENT_ID" \
+            -H "$HEADER" \
+            -H "Content-Type: application/json" \
+            -d "$ROLES_PAYLOAD")
+          
+          if [ "$RESPONSE_CODE" = "204" ] || [ "$RESPONSE_CODE" = "409" ]; then
+              # 204 = Succes, 409 = Conflict (rolurile sunt deja mapate) - Ambele sunt OK
+              echo "Mapare roluri Service Account efectuata cu succes (Status $RESPONSE_CODE)."
+          else
+              echo "Eroare critica: Maparea a returnat status code $RESPONSE_CODE. Job esueaza."
+              exit 1
+          fi
+          
+          echo "Job de mapare roluri finalizat cu succes."

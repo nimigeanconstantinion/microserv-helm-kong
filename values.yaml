@@ -1,0 +1,137 @@
+# STEP 2: values.yaml - Default Configuration Values
+# ================================================
+# This file contains all configurable values for the chart
+# Users can override these values during installation
+
+# Global settings that apply to all components
+global:
+  namespace: default              # Target Kubernetes namespace
+  storageClass: local-path       # Storage class for persistent volumes
+  imageRegistry: ""              # Global image registry prefix (optional)
+  imagePullSecrets: []           # Image pull secrets if needed
+
+
+
+# MySQL Configuration  
+mysql:
+  name: mysql
+  serviceName: mysql-service
+  enabled: true                   # Enable/disable MySQL deployment
+  image:
+    repository: mysql
+    tag: "8.0"
+    pullPolicy: IfNotPresent
+
+
+  # Database configuration
+  database: micro_db            # Database name
+  user: root                # Database user
+  password: root            # Database password (will be base64 encoded)
+  rootPassword: root        # Root password (will be base64 encoded)
+
+  # Storage configuration
+  storage:
+    size: 5Gi                   # Persistent volume size
+    accessMode: ReadWriteOnce   # Access mode for PVC
+
+  # Resource limits and requests
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "1Gi"
+      cpu: "500m"
+
+postgres:
+  name: postgres
+  serviceName: postgres-service
+  enabled: true                   # Enable/disable Postgres deployment
+  image:
+    repository: postgres
+    tag: "16"
+    pullPolicy: IfNotPresent
+
+  postgres_db: kong            # Database name
+  postgres_user: kong                # Database user
+  postgres_password: kong                # Database user
+
+
+# Elasticsearch Configuration  
+elasticsearch:
+  storage:
+    size: 5Gi
+    accessMode: ReadWriteOnce
+  password: passwOrd # password (will be base64 encoded)
+
+# Keycloak Configuration  
+keycloak:
+  volumeMount1:
+    name: keycloak-data
+    mountPath: /opt/keycloak/data
+    persistentVolumeClaim: 
+      claimName: keycloak-pvc
+
+  volumeMount2:
+    name: realm-export
+    mountPath: /opt/keycloak/data/import
+    items:
+      key: realm-export.json
+      path: realm-export.json
+       
+
+
+  dbURL: jdbc:mysql://mysql-service:3306/keycloak
+  storage:
+    size: 5Gi
+    accessMode: ReadWriteOnce
+  password: passwOrd # password (will be base64 encoded)
+
+app:
+  config.json: |
+    {
+      "VITE_API_URL": "http://react-app.local/ui",
+      "VITE_KEYCLOAK_URL":"http://keycloak.local",
+      "VITE_KEYCLOAK_SECRET": "Xbn5JQ71nFt8wD5Gk5HVD2Qcmng899k4"
+    }
+
+images:
+
+  # Logstash image
+  logstash:
+    repository: docker.elastic.co/logstash/logstash
+    tag: "8.12.1"
+    pullPolicy: IfNotPresent
+
+  # Elastic image
+  elasticsearch:
+    repository: docker.elastic.co/elasticsearch/elasticsearch
+    tag: "8.12.1"
+    pullPolicy: IfNotPresent
+
+
+  # Kibana image
+  kibana:
+    repository: docker.elastic.co/kibana/kibana
+    tag: "8.12.1"
+    pullPolicy: IfNotPresent
+
+  #Command image
+  command:
+    repository: ion21/command-service
+    tag: "23.12.2025_185328"
+    pullPolicy: IfNotPresent
+
+  # Keycloak image
+  keycloak:
+    repository: quay.io/keycloak/keycloak
+    tag: "26.4.7"
+    pullPolicy: IfNotPresent    
+
+  # #Command image
+  # server:
+  #   repository: ion21/server-service
+  #   tag: "16.10.2025.18.06.33"
+  #   pullPolicy: IfNotPresent
+
+

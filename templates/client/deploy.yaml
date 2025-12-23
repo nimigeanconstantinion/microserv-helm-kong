@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: client
+  labels:
+    app: client
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: client
+  template:
+    metadata:
+      labels:
+        app: client
+    spec:
+      containers:
+        - name: client-container
+          image: ion21/client-vite:22.12.2025_185612
+          ports:
+            - containerPort: 3000
+          volumeMounts:
+            - name: app-config-volume
+              mountPath: /app/public/config
+              readOnly: true
+          env:
+            - name: VITE_KEYCLOAK_URL
+              value: "http://keycloak.local"
+            - name: VITE_API_URL
+              value: "http://react-app.local"     
+      volumes:
+        - name: app-config-volume
+          configMap:
+            name:  {{ include "ms-kong.fullname" . }}-app-config
+            items:
+              - key: config.json
+                path: config.json
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: client
+  namespace: default
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: 3000
+  selector:
+    app: client
