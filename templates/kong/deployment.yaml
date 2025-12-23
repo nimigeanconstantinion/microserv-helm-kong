@@ -20,6 +20,8 @@ spec:
           value: "postgres"
         - name: KONG_PG_HOST
           value: "postgres"
+        - name: KONG_PG_DATABASE
+          value: "kong" # Numele serviciului creat mai sus          
         - name: KONG_PG_PASSWORD
           value: "kong"
         - name: KONG_PG_USER
@@ -31,9 +33,9 @@ spec:
         - name: KONG_ADMIN_GUI_LISTEN
           value: "0.0.0.0:8002"
         - name: KONG_ADMIN_GUI_URL
-          value: "http://localhost:8002"
+          value: "http://kong-manager.local"
         - name: KONG_ADMIN_GUI_API_URL
-          value: "http://localhost:8001"
+          value: "http://kong-admin.local"
         ports:
         - name: proxy
           containerPort: 5000
