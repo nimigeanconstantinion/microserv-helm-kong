@@ -20,6 +20,14 @@ spec:
           env:
             - name: SPRING_PROFILES_ACTIVE
               value: "helm"
+            - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI
+              value: "http://keycloak.local/realms/rsk"
+            - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI
+              value: "http://keycloak:8080/realms/rsk/protocol/openid-connect/certs"
+            - name: APP_SECURITY_EXPECTED_ISSUER
+              value: "http://keycloak.local/realms/rsk"
+            - name: ADDITIONAL_CORS_ORIGIN
+              value: "http://client:3000,http://keycloak:8080,http://client:5000,http://register-service,http://register-service:8088,http://keycloak.local"
           ports:
             - containerPort: 8081
 ---

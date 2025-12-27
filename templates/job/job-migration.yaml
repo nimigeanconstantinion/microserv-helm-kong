@@ -2,25 +2,42 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: kong-migrations
-  annotations:
-    # "helm.sh/hook": pre-install,pre-upgrade # Rulează înainte de deployment-ul Kong
-    "helm.sh/hook-delete-policy": before-hook-creation
+  # Am șters adnotările de hook pentru ca Helm să creeze Deployment-urile imediat
 spec:
   template:
     spec:
       restartPolicy: OnFailure
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:latest
+          command:
+            - /bin/sh
+            - -c
+            - |
+              until nc -zv postgres 5432; do
+                echo "Waiting for postgres at postgres:5432..."
+                sleep 2
+              done
       containers:
-      - name: kong-migrations
-        image: kong:3.8
-        command: ["kong", "migrations", "bootstrap"]
-        env:
-        - name: KONG_DATABASE
-          value: "postgres"
-        - name: KONG_PG_HOST
-          value: "postgres" # Numele serviciului creat mai sus
-        - name: KONG_PG_DATABASE
-          value: "kong" # Numele serviciului creat mai sus
-        - name: KONG_PG_USER
-          value: "kong"
-        - name: KONG_PG_PASSWORD
-          value: "kong"
+        - name: kong-migrations
+          image: kong:3.8
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              # Încercăm bootstrap; dacă baza există deja, mergem mai departe
+              kong migrations bootstrap || echo "Database already bootstrapped"
+              kong migrations up
+              kong migrations finish
+          env:
+            - name: KONG_DATABASE
+              value: "postgres"
+            - name: KONG_PG_HOST
+              value: "postgres"
+            - name: KONG_PG_DATABASE
+              value: "kong"
+            - name: KONG_PG_USER
+              value: "kong"
+            - name: KONG_PG_PASSWORD
+              value: "kong"

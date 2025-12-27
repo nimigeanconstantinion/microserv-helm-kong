@@ -2,51 +2,19 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: main-ingress
-  namespace: default
   annotations:
-    #  functionalkubernetes.io/ingress.class: nginx
-    # nginx.ingress.kubernetes.io/rewrite-target: /
-    #nginx.ingress.kubernetes.io/rewrite-target: /
-    # 1. Schimbăm clasa de ingress la kong
-    kubernetes.io/ingress.class: kong
-    # 2. (Opțional) Dacă vrei ca rutele /ui și /config să fie trimise la client FĂRĂ prefix:
-    konghq.com/strip-path: "true"
-
-
+    kubernetes.io/ingress.class: nginx
+    # IMPORTANT: Nginx nu trebuie să modifice calea, o lăsăm pe seama Kong
+    nginx.ingress.kubernetes.io/rewrite-target: /
 spec:
   rules:
     - host: react-app.local
       http:
         paths:
-          - path: /ui
-            pathType: Prefix
-            backend:
-              service:
-                name: client
-                port:
-                  number: 3000
-          - path: /config
-            pathType: Prefix
-            backend:
-              service:
-                name: client
-                port:
-                  number: 3000
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: gateway
+                name: kong-service # Serviciul tău Kong
                 port:
                   number: 5000
-
-          # - path: /api
-          #   pathType: Prefix
-          #   backend:
-          #     service:
-          #       name: nserver-service
-          #       port:
-          #         number: 8080
-                  
-
-                  
